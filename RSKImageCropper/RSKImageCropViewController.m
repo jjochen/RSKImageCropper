@@ -1,7 +1,7 @@
 //
 // RSKImageCropViewController.m
 //
-// Copyright (c) 2014 Ruslan Skorb, http://lnkd.in/gsBbvb
+// Copyright (c) 2014 Ruslan Skorb, http://ruslanskorb.com/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -66,21 +66,30 @@ static const CGFloat kLandscapeCancelAndChooseButtonsVerticalMargin = 12.0f;
 
 #pragma mark - Lifecycle
 
-- (instancetype)initWithImage:(UIImage *)originalImage
+- (instancetype)init
 {
     self = [super init];
     if (self) {
-        _originalImage = originalImage;
+        _avoidEmptySpaceAroundImage = NO;
+        _applyMaskToCroppedImage = NO;
         _cropMode = RSKImageCropModeCircle;
+    }
+    return self;
+}
+
+- (instancetype)initWithImage:(UIImage *)originalImage
+{
+    self = [self init];
+    if (self) {
+        _originalImage = originalImage;
     }
     return self;
 }
 
 - (instancetype)initWithImage:(UIImage *)originalImage cropMode:(RSKImageCropMode)cropMode
 {
-    self = [super init];
+    self = [self initWithImage:originalImage];
     if (self) {
-        _originalImage = originalImage;
         _cropMode = cropMode;
     }
     return self;
@@ -228,6 +237,7 @@ static const CGFloat kLandscapeCancelAndChooseButtonsVerticalMargin = 12.0f;
     if (!_imageScrollView) {
         _imageScrollView = [[RSKImageScrollView alloc] init];
         _imageScrollView.clipsToBounds = NO;
+        _imageScrollView.aspectFill = self.avoidEmptySpaceAroundImage;
     }
     return _imageScrollView;
 }
@@ -266,7 +276,7 @@ static const CGFloat kLandscapeCancelAndChooseButtonsVerticalMargin = 12.0f;
         _moveAndScaleLabel = [[UILabel alloc] init];
         _moveAndScaleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         _moveAndScaleLabel.backgroundColor = [UIColor clearColor];
-        _moveAndScaleLabel.text = @"Move and Scale";
+        _moveAndScaleLabel.text = NSLocalizedString(@"Move and Scale", @"Move and Scale label");
         _moveAndScaleLabel.textColor = [UIColor whiteColor];
         _moveAndScaleLabel.opaque = NO;
     }
@@ -278,7 +288,7 @@ static const CGFloat kLandscapeCancelAndChooseButtonsVerticalMargin = 12.0f;
     if (!_cancelButton) {
         _cancelButton = [[UIButton alloc] init];
         _cancelButton.translatesAutoresizingMaskIntoConstraints = NO;
-        [_cancelButton setTitle:@"Cancel" forState:UIControlStateNormal];
+        [_cancelButton setTitle:NSLocalizedString(@"Cancel", @"Cancel button") forState:UIControlStateNormal];
         [_cancelButton addTarget:self action:@selector(onCancelButtonTouch:) forControlEvents:UIControlEventTouchUpInside];
         _cancelButton.opaque = NO;
     }
@@ -290,7 +300,7 @@ static const CGFloat kLandscapeCancelAndChooseButtonsVerticalMargin = 12.0f;
     if (!_chooseButton) {
         _chooseButton = [[UIButton alloc] init];
         _chooseButton.translatesAutoresizingMaskIntoConstraints = NO;
-        [_chooseButton setTitle:@"Choose" forState:UIControlStateNormal];
+        [_chooseButton setTitle:NSLocalizedString(@"Choose", @"Choose button") forState:UIControlStateNormal];
         [_chooseButton addTarget:self action:@selector(onChooseButtonTouch:) forControlEvents:UIControlEventTouchUpInside];
         _chooseButton.opaque = NO;
     }
@@ -305,6 +315,15 @@ static const CGFloat kLandscapeCancelAndChooseButtonsVerticalMargin = 12.0f;
         _doubleTapGestureRecognizer.numberOfTapsRequired = 2;
     }
     return _doubleTapGestureRecognizer;
+}
+
+- (void)setAvoidEmptySpaceAroundImage:(BOOL)avoidEmptySpaceAroundImage
+{
+    if (_avoidEmptySpaceAroundImage != avoidEmptySpaceAroundImage) {
+        _avoidEmptySpaceAroundImage = avoidEmptySpaceAroundImage;
+        
+        self.imageScrollView.aspectFill = avoidEmptySpaceAroundImage;
+    }
 }
 
 - (void)setOriginalImage:(UIImage *)originalImage
@@ -490,51 +509,105 @@ static const CGFloat kLandscapeCancelAndChooseButtonsVerticalMargin = 12.0f;
     CGRect cropRect = CGRectZero;
     float zoomScale = 1.0 / self.imageScrollView.zoomScale;
     
-    cropRect.origin.x = self.imageScrollView.contentOffset.x * zoomScale;
-    cropRect.origin.y = self.imageScrollView.contentOffset.y * zoomScale;
+    cropRect.origin.x = round(self.imageScrollView.contentOffset.x * zoomScale);
+    cropRect.origin.y = round(self.imageScrollView.contentOffset.y * zoomScale);
     cropRect.size.width = CGRectGetWidth(self.imageScrollView.bounds) * zoomScale;
     cropRect.size.height = CGRectGetHeight(self.imageScrollView.bounds) * zoomScale;
     
-    CGSize imageSize = self.originalImage.size;
-    CGFloat x = CGRectGetMinX(cropRect);
-    CGFloat y = CGRectGetMinY(cropRect);
-    CGFloat width = CGRectGetWidth(cropRect);
-    CGFloat height = CGRectGetHeight(cropRect);
-    
-    UIImageOrientation imageOrientation = self.originalImage.imageOrientation;
-    if (imageOrientation == UIImageOrientationRight || imageOrientation == UIImageOrientationRightMirrored) {
-        cropRect.origin.x = y;
-        cropRect.origin.y = imageSize.width - CGRectGetWidth(cropRect) - x;
-        cropRect.size.width = height;
-        cropRect.size.height = width;
-    } else if (imageOrientation == UIImageOrientationLeft || imageOrientation == UIImageOrientationLeftMirrored) {
-        cropRect.origin.x = imageSize.height - CGRectGetHeight(cropRect) - y;
-        cropRect.origin.y = x;
-        cropRect.size.width = height;
-        cropRect.size.height = width;
-    } else if (imageOrientation == UIImageOrientationDown || imageOrientation == UIImageOrientationDownMirrored) {
-        cropRect.origin.x = imageSize.width - CGRectGetWidth(cropRect) - x;;
-        cropRect.origin.y = imageSize.height - CGRectGetHeight(cropRect) - y;
-    }
+    cropRect = CGRectIntegral(cropRect);
     
     return cropRect;
 }
 
 - (UIImage *)croppedImage:(UIImage *)image cropRect:(CGRect)cropRect
 {
+    // Step 1: check and correct the crop rect.
+    CGSize imageSize = image.size;
+    CGFloat x = CGRectGetMinX(cropRect);
+    CGFloat y = CGRectGetMinY(cropRect);
+    CGFloat width = CGRectGetWidth(cropRect);
+    CGFloat height = CGRectGetHeight(cropRect);
+    
+    UIImageOrientation imageOrientation = image.imageOrientation;
+    if (imageOrientation == UIImageOrientationRight || imageOrientation == UIImageOrientationRightMirrored) {
+        cropRect.origin.x = y;
+        cropRect.origin.y = round(imageSize.width - CGRectGetWidth(cropRect) - x);
+        cropRect.size.width = height;
+        cropRect.size.height = width;
+    } else if (imageOrientation == UIImageOrientationLeft || imageOrientation == UIImageOrientationLeftMirrored) {
+        cropRect.origin.x = round(imageSize.height - CGRectGetHeight(cropRect) - y);
+        cropRect.origin.y = x;
+        cropRect.size.width = height;
+        cropRect.size.height = width;
+    } else if (imageOrientation == UIImageOrientationDown || imageOrientation == UIImageOrientationDownMirrored) {
+        cropRect.origin.x = round(imageSize.width - CGRectGetWidth(cropRect) - x);
+        cropRect.origin.y = round(imageSize.height - CGRectGetHeight(cropRect) - y);
+    }
+    
+    // Step 2: create an image using the data contained within the specified rect.
     CGImageRef croppedCGImage = CGImageCreateWithImageInRect(image.CGImage, cropRect);
     UIImage *croppedImage = [UIImage imageWithCGImage:croppedCGImage scale:1.0f orientation:image.imageOrientation];
     CGImageRelease(croppedCGImage);
-    return [croppedImage fixOrientation];
+    
+    // Step 3: fix orientation of the cropped image.
+    croppedImage = [croppedImage fixOrientation];
+    
+    // Step 4: If current mode is `RSKImageCropModeSquare` or mask should not be applied to the image after cropping,
+    // we can return the cropped image immediately.
+    // Otherwise, we need to apply the mask to the image.
+    if (self.cropMode == RSKImageCropModeSquare || !self.applyMaskToCroppedImage) {
+        // Step 5: return the cropped image
+        return croppedImage;
+    } else {
+        UIBezierPath *maskPath = [self.maskPath copy];
+        
+        // Step 5: scale the mask to the size of the cropped image.
+        CGFloat scale;
+        if (croppedImage.size.height > croppedImage.size.width) {
+            scale = croppedImage.size.height / CGRectGetHeight(maskPath.bounds);
+        } else {
+            scale = croppedImage.size.width / CGRectGetWidth(maskPath.bounds);
+        }
+        [maskPath applyTransform:CGAffineTransformMakeScale(scale, scale)];
+        
+        // Step 6: move the mask to the top-left.
+        CGPoint translation = CGPointMake(-CGRectGetMinX(maskPath.bounds), -CGRectGetMinY(maskPath.bounds));
+        [maskPath applyTransform:CGAffineTransformMakeTranslation(translation.x, translation.y)];
+        
+        // Step 7: apply the mask on the cropped image.
+        UIGraphicsBeginImageContext(maskPath.bounds.size);
+        
+        // 7a: apply the mask.
+        [maskPath addClip];
+        
+        // 7b: draw the cropped image.
+        CGPoint point = CGPointMake(round((CGRectGetWidth(maskPath.bounds) - croppedImage.size.width) * 0.5f),
+                                    round((CGRectGetHeight(maskPath.bounds) - croppedImage.size.height) * 0.5f));
+        [croppedImage drawAtPoint:point];
+        
+        // 7c: get the cropped image to which the mask is applied.
+        croppedImage = UIGraphicsGetImageFromCurrentImageContext();
+        
+        UIGraphicsEndImageContext();
+        
+        croppedImage = [UIImage imageWithCGImage:croppedImage.CGImage];
+        
+        // Step 8: return the cropped image
+        return croppedImage;
+    }
 }
 
 - (void)cropImage
 {
+    if ([self.delegate respondsToSelector:@selector(imageCropViewController:willCropImage:)]) {
+        [self.delegate imageCropViewController:self willCropImage:self.originalImage];
+    }
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        UIImage *croppedImage = [self croppedImage:self.originalImage cropRect:[self cropRect]];
+        CGRect cropRect = [self cropRect];
+        UIImage *croppedImage = [self croppedImage:self.originalImage cropRect:cropRect];
         dispatch_async(dispatch_get_main_queue(), ^{
-            if ([self.delegate respondsToSelector:@selector(imageCropViewController:didCropImage:)]) {
-                [self.delegate imageCropViewController:self didCropImage:croppedImage];
+            if ([self.delegate respondsToSelector:@selector(imageCropViewController:didCropImage:usingCropRect:)]) {
+                [self.delegate imageCropViewController:self didCropImage:croppedImage usingCropRect:cropRect];
             }
         });
     });
